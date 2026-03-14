@@ -1,5 +1,5 @@
 use aes::cipher::{KeyIvInit, StreamCipher};
-use positioned_io::{Cursor, Slice, Size, ReadAt};
+use positioned_io::ReadAt;
 use std::cmp::min;
 use std::io;
 use std::io::{Read, Seek, SeekFrom};
@@ -12,34 +12,83 @@ pub struct FileRegion<T: ReadAt> {
     pub offset: u64,
     pub size: u64,
     pub pos: u64,
-    pub slice: Slice<T>,
+    pub file: T,
 }
 
 impl<T: ReadAt> FileRegion<T> {
     pub fn new(file: T, offset: u64, size: u64) -> Self {
-        let slice = Slice::new(file, offset, Some(size));
         Self {
             offset,
             size,
             pos: 0,
-            slice,
+            file,
         }
     }
 }
 
+impl<T: ReadAt> Read for FileRegion<T> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.pos >= self.size {
+            return Ok(0);
+        }
+
+        let size = min(buf.len() as u64, self.size - self.pos) as usize;
+        let n = self
+            .file
+            .read_at(self.pos + self.offset, &mut buf[..size])?;
+
+        self.pos += size as u64;
+        Ok(n)
+    }
+}
+
+impl<T: ReadAt> Seek for FileRegion<T> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        match pos {
+            SeekFrom::Current(v) => {
+                let new = (self.pos as i64 + v).clamp(0, self.size as i64) as u64;
+                self.pos = new;
+            }
+            SeekFrom::Start(v) => {
+                self.pos = v;
+            }
+            SeekFrom::End(v) => {
+                self.pos -= v.unsigned_abs();
+            }
+        };
+
+        Ok(self.pos)
+    }
+}
+
+impl<T: ReadAt> ReadAt for FileRegion<T> {
+    fn read_at(&self, pos: u64, buf: &mut [u8]) -> io::Result<usize> {
+        if pos >= self.size {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "position out of bounds",
+            ));
+        }
+
+        let size = min(buf.len() as u64, self.size - pos) as usize;
+        let n = self.file.read_at(pos + self.offset, &mut buf[..size])?;
+        Ok(n)
+    }
+}
+
 pub struct EncryptedCtrFileRegion<T: ReadAt> {
-    pub inner: Slice<T>,
+    pub inner: FileRegion<T>,
     pub key: Vec<u8>,
     pub ctr: u64,
 }
 
 impl<T: ReadAt> EncryptedCtrFileRegion<T> {
-    pub fn new(inner: Slice<T>, key: Vec<u8>, ctr: u64) -> Self {
+    pub fn new(inner: FileRegion<T>, key: Vec<u8>, ctr: u64) -> Self {
         Self { inner, key, ctr }
     }
 
     fn read_and_decrypt(&self, buf: &mut [u8], pos: u64) -> io::Result<usize> {
-        let remaining = self.inner.size() - pos;
+        let remaining = self.inner.size - pos;
         let max_read = min(buf.len() as u64, remaining) as usize;
 
         let offset = self.inner.offset + pos;
