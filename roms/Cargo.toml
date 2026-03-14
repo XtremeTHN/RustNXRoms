@@ -1,0 +1,20 @@
+[package]
+name = "nxroms"
+version = "0.1.0"
+edition = "2024"
+
+
+[dependencies]
+async-channel = "2.5.0"
+hex = "0.4.3"
+shellexpand = "3.1.2"
+thiserror = "2.0.18"
+aes = "0.8.4"
+ctr = "0.9.2"
+ecb = "0.1.2"
+xts-mode = "0.5.1"
+dirs = "6.0.0"
+binrw = { workspace = true }
+log = { workspace = true }
+positioned-io = { workspace = true }
+env_logger = { workspace = true }

@@ -1,0 +1,12 @@
+[package]
+name = "nxroms-test"
+version = "0.1.0"
+edition = "2024"
+
+
+[dependencies]
+nxroms = { workspace = true }
+binrw = { workspace = true }
+log = { workspace = true }
+positioned-io = { workspace = true }
+env_logger = { workspace = true }

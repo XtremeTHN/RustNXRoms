@@ -1,0 +1,10 @@
+[workspace]
+resolver = "3"
+members = ["roms/", "test/"]
+
+[workspace.dependencies]
+nxroms = { path = "roms" }
+binrw = "0.15.1"
+log = "0.4.29"
+positioned-io = "0.3.5"
+env_logger = "0.11.9"
