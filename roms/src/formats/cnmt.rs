@@ -1,6 +1,6 @@
 use binrw::BinRead;
 
-#[derive(BinRead, Debug)]
+#[derive(BinRead, Debug, PartialEq, Eq)]
 #[br(little, repr = u8)]
 pub enum ContentMetaType {
     Invalid = 0,
@@ -16,7 +16,7 @@ pub enum ContentMetaType {
     DataPatch = 0x84
 }
 
-#[derive(BinRead, Debug)]
+#[derive(BinRead, Debug, PartialEq, Eq)]
 #[br(little, repr = u8)]
 pub enum ContentMetaAttributes {
     IncludesExFatDriver = 0,
