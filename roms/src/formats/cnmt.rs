@@ -41,3 +41,11 @@ pub struct PackagedContentMetaHeader {
     #[br(pad_before = 0x3, pad_after = 0x4)]
     pub req_sys_version: u32
 }
+
+#[derive(BinRead, Debug)]
+#[br(little)]
+pub struct AddOnContentMetaExtendedHeader {
+    pub app_id: u64,
+    #[br(pad_after = 0xC)]
+    pub required_app_version: u32,
+}
