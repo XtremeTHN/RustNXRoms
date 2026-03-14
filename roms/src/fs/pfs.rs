@@ -113,7 +113,7 @@ impl<T: BinRead + PFSHeader> PartitionFs<T> {
 }
 
 impl PartitionFs<PartitionFsHeader> {
-    pub fn new_default_header<R: Read + Seek>(
+    pub fn new_pfs0_header<R: Read + Seek>(
         stream: &mut R,
     ) -> Result<PartitionFs<PartitionFsHeader>, binrw::Error> {
         let h = PartitionFsHeader::read(stream)?;
