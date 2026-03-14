@@ -71,7 +71,6 @@ pub struct HierarchicalSha256Data {
     #[br(count = 0x20)]
     pub master_hash: Vec<u8>,
     pub block_size: u32,
-    #[br(pad_after = 0x4)]
     pub layer_count: u32,
 
     #[br(count = layer_count)]
