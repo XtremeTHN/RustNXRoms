@@ -405,6 +405,7 @@ version = "0.1.0"
 dependencies = [
  "binrw",
  "env_logger",
+ "hex",
  "log",
  "nxroms",
  "positioned-io",

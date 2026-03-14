@@ -10,3 +10,4 @@ binrw = { workspace = true }
 log = { workspace = true }
 positioned-io = { workspace = true }
 env_logger = { workspace = true }
+hex = {workspace = true}
