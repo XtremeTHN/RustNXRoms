@@ -2,15 +2,14 @@ use binrw::BinRead;
 use positioned_io::ReadAt;
 use std::{
     fs::File,
-    io::{Read, Seek},
+    io::{Read, Seek, Write},
 };
 
 use log::info;
 
 use nxroms::{
     formats::{
-        nca::{self, Nca},
-        xci::Xci,
+        cnmt, nacp::Nacp, nca::{self, Nca}, xci::Xci
     },
     fs::{
         pfs::{PFSHeader, PartitionFs},
@@ -27,40 +26,79 @@ fn list_romfs_files(rom_fs: RomFs) {
     }
 }
 
-fn get_control_nca_romfs<T: BinRead + PFSHeader, R: ReadAt + Read + Seek>(
+fn print_info<T: BinRead + PFSHeader, R: ReadAt + Read + Seek>(
     pfs: PartitionFs<T>,
     part: R,
-) -> Option<RomFs> {
+) {
     let mut keyring = Keyring::new(String::from("~/.switch/prod.keys"));
     keyring.parse().expect("error while parsing keyring");
+
     for (index, entry) in pfs.header.entry_table().iter().enumerate() {
         let name = pfs.get_name_for_entry(entry).expect("failed to get name:");
+        info!("{}", name);
 
         let mut r = pfs.open_entry(entry, &part);
 
-        if name.split(".").collect::<Vec<&str>>()[1] != "nca" {
+        let splitted = name.split(".").collect::<Vec<&str>>();
+        let ext = splitted.last();
+        if ext == Some(&"xml") {
+            let mut out = File::create("out.xml").expect("fail");
+            let mut buf = vec![];
+            r.read_to_end(&mut buf);
+            out.write_all(&buf);
+        }
+        
+        if ext != Some(&"nca") {
             continue;
         }
 
         let mut nca = Nca::new(&keyring, &mut r).expect("err");
-
         match nca.header.content_type {
+            nca::ContentType::Meta => {
+                info!("found meta: {}", name);
+                let mut fs = nca.open_fs(0, &mut r).expect("fail");
+                let cnmt_pfs = PartitionFs::new_pfs0_header(&mut fs).expect("fail");
+
+                let mut stream = cnmt_pfs.open_entry(&cnmt_pfs.header.entry_table[0], &mut fs);                    
+                
+                let cnmt_head = cnmt::PackagedContentMetaHeader::read(&mut stream).expect("fail");
+                println!("{:#?}", cnmt_head);
+
+                if cnmt_head.content_meta_type == cnmt::ContentMetaType::Patch {
+                    info!("this package is an update");
+                } else if cnmt_head.content_meta_type == cnmt::ContentMetaType::Application {
+                    info!("this package is an application");
+                } else if cnmt_head.content_meta_type == cnmt::ContentMetaType::AddOnContent {
+                    info!("this package is a dlc");
+                } else {
+                    info!("unknown package type: {:?}", cnmt_head.content_meta_type);
+                }
+
+                let extended = cnmt::AddOnContentMetaExtendedHeader::read(&mut stream).expect("fail");
+                println!("{:#?}", extended);
+            }
+
             nca::ContentType::Control => {
-                info!("found control nca at index {}: {}", index, name);
+                info!("found control: {}", name);
                 let mut fs = nca.open_fs(0, &mut r).expect("err");
                 let rom_fs = RomFs::new(&mut fs).expect("err");
 
-                return Some(rom_fs);
+                let mut raw_nacp = rom_fs.open_file(&rom_fs.files[0], &mut fs);
+                let nacp = Nacp::read(&mut raw_nacp).expect("fail to parse nacp");
+
+                info!("Title: {}", nacp.titles[0].name().unwrap());
+                info!("Version: {}", nacp.version().unwrap());
             }
-            _ => {}
+
+            _ => {
+                continue;
+            }
         }
     }
-
-    None
 }
 
 fn xci_test() {
-    let mut file = File::open("ori.xci").expect("er");
+    let mut file = File::open("/home/axel/Projects/d/ori.xci").expect("er");
     let mut xci = Xci::new(&mut file).expect("err");
 
     let mut part = xci
@@ -68,19 +106,16 @@ fn xci_test() {
         .expect("err");
     let pfs = xci.open_partition_fs(&mut part).expect("");
 
-    info!("Listing pfs files...");
-
-    let romfs = get_control_nca_romfs(pfs, part).unwrap();
-
-    list_romfs_files(romfs);
+    print_info(pfs, part);
 }
 
 fn nsp_test() {
-    let mut file = File::open("undertale.nsp").expect("failed");
-    let pfs = PartitionFs::new_default_header(&mut file).expect("failed");
+    let mut file = File::open("hog_mex_dlc.nsp").expect("failed");
+    let pfs = PartitionFs::new_pfs0_header(&mut file).expect("failed");
+    let mut keyring = Keyring::new(String::from("~/.switch/prod.keys"));
+    keyring.parse().expect("fail");
 
-    let romfs = get_control_nca_romfs(pfs, file).unwrap();
-    list_romfs_files(romfs);
+    print_info(pfs, &mut file);
 }
 
 fn main() {
