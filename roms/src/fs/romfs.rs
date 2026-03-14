@@ -108,7 +108,7 @@ impl RomFs {
         String::from_utf8(entry.name.clone())
     }
 
-    pub fn get_file<T: ReadAt>(&self, file: &RomFsFileEntry, stream: T) -> FileRegion<T> {
+    pub fn open_file<T: ReadAt>(&self, file: &RomFsFileEntry, stream: T) -> FileRegion<T> {
         FileRegion::new(stream, self.header.data_offset + file.offset, file.size)
     }
 }
