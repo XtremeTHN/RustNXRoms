@@ -9,7 +9,7 @@ use log::info;
 
 use nxroms::{
     formats::{
-        cnmt, nacp::Nacp, nca::{self, Nca}, xci::Xci
+        cnmt, nacp::{Nacp, TitleLanguage}, nca::{self, Nca}, xci::Xci
     },
     fs::{
         pfs::{PFSHeader, PartitionFs},
@@ -85,8 +85,13 @@ fn print_info<T: BinRead + PFSHeader, R: ReadAt + Read + Seek>(
 
                 let mut raw_nacp = rom_fs.open_file(&rom_fs.files[0], &mut fs);
                 let nacp = Nacp::read(&mut raw_nacp).expect("fail to parse nacp");
+                
+                let lang = TitleLanguage::from_system_locale().unwrap();
 
-                info!("Title: {}", nacp.titles[0].name().unwrap());
+                info!("selected language: {:?}", lang);
+
+                let title = &nacp.titles[lang as usize];
+                info!("Title: {}", title.name().unwrap());
                 info!("Version: {}", nacp.version().unwrap());
             }
 
@@ -110,7 +115,7 @@ fn xci_test() {
 }
 
 fn nsp_test() {
-    let mut file = File::open("hog_mex_dlc.nsp").expect("failed");
+    let mut file = File::open("undertale.nsp").expect("failed");
     let pfs = PartitionFs::new_pfs0_header(&mut file).expect("failed");
     let mut keyring = Keyring::new(String::from("~/.switch/prod.keys"));
     keyring.parse().expect("fail");

@@ -41,7 +41,10 @@ pub enum TitleLanguageErrors {
 impl TitleLanguage {
     pub fn from_system_locale() -> Result<Self, TitleLanguageErrors> {
         let languages = glib::language_names();
-        let language = languages.first().map(|s| s.as_ref()).unwrap_or("en");
+        let raw_lang = languages.first().map(|s| s.as_ref()).unwrap_or("en_US");
+        
+        let parts = raw_lang.split(".").collect::<Vec<&str>>();
+        let language = parts[0];
 
         match language {
             "en_US" => Ok(Self::AmericanEnglish),
