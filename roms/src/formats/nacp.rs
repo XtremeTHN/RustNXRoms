@@ -26,7 +26,7 @@ pub enum TitleLanguage {
     TraditionalChinese = 13,
     SimplifiedChinese = 14,
     BrazilianPortuguese = 15,
-    // remember to remove this if `roms` is separated from Lift
+    #[cfg(feature = "glib")]
     Automatic = 16,
 }
 
@@ -36,32 +36,34 @@ pub enum TitleLanguageErrors {
     LanguageNotSupported,
 }
 
-// impl TitleLanguage {
-//     pub fn from_system_locale() -> Result<Self, TitleLanguageErrors> {
-//         let languages = gtk4::glib::language_names();
-//         let language = languages.first().map(|s| s.as_ref()).unwrap_or("en");
 
-//         match language {
-//             "en_US" => Ok(Self::AmericanEnglish),
-//             "en_GB" => Ok(Self::BritishEnglish),
-//             "ja" | "ja_JP" => Ok(Self::Japanese),
-//             "fr" | "fr_FR" => Ok(Self::French),
-//             "de" | "de_DE" => Ok(Self::German),
-//             "es_419" => Ok(Self::LatinAmericanSpanish),
-//             "es_ES" => Ok(Self::Spanish),
-//             "it" | "it_IT" => Ok(Self::Italian),
-//             "nl" | "nl_NL" => Ok(Self::Dutch),
-//             "fr_CA" => Ok(Self::CanadianFrench),
-//             "pt_PT" => Ok(Self::Portuguese),
-//             "ru" | "ru_RU" => Ok(Self::Russian),
-//             "ko" | "ko_KR" => Ok(Self::Korean),
-//             "zh_TW" | "zh_HK" => Ok(Self::TraditionalChinese),
-//             "zh_CN" | "zh_SG" => Ok(Self::SimplifiedChinese),
-//             "pt_BR" => Ok(Self::BrazilianPortuguese),
-//             _ => Err(TitleLanguageErrors::LanguageNotSupported),
-//         }
-//     }
-// }
+#[cfg(feature = "glib")]
+impl TitleLanguage {
+    pub fn from_system_locale() -> Result<Self, TitleLanguageErrors> {
+        let languages = glib::language_names();
+        let language = languages.first().map(|s| s.as_ref()).unwrap_or("en");
+
+        match language {
+            "en_US" => Ok(Self::AmericanEnglish),
+            "en_GB" => Ok(Self::BritishEnglish),
+            "ja" | "ja_JP" => Ok(Self::Japanese),
+            "fr" | "fr_FR" => Ok(Self::French),
+            "de" | "de_DE" => Ok(Self::German),
+            "es_419" => Ok(Self::LatinAmericanSpanish),
+            "es_ES" => Ok(Self::Spanish),
+            "it" | "it_IT" => Ok(Self::Italian),
+            "nl" | "nl_NL" => Ok(Self::Dutch),
+            "fr_CA" => Ok(Self::CanadianFrench),
+            "pt_PT" => Ok(Self::Portuguese),
+            "ru" | "ru_RU" => Ok(Self::Russian),
+            "ko" | "ko_KR" => Ok(Self::Korean),
+            "zh_TW" | "zh_HK" => Ok(Self::TraditionalChinese),
+            "zh_CN" | "zh_SG" => Ok(Self::SimplifiedChinese),
+            "pt_BR" => Ok(Self::BrazilianPortuguese),
+            _ => Err(TitleLanguageErrors::LanguageNotSupported),
+        }
+    }
+}
 
 impl TryFrom<i32> for TitleLanguage {
     type Error = TitleLanguageErrors;
@@ -83,6 +85,7 @@ impl TryFrom<i32> for TitleLanguage {
             13 => Ok(Self::TraditionalChinese),
             14 => Ok(Self::SimplifiedChinese),
             15 => Ok(Self::BrazilianPortuguese),
+            #[cfg(feature = "glib")]
             16 => Ok(Self::Automatic),
             _ => Err(TitleLanguageErrors::LanguageNotSupported),
         }
