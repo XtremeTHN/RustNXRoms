@@ -96,7 +96,7 @@ impl TryFrom<i32> for TitleLanguage {
     }
 }
 
-#[derive(BinRead)]
+#[derive(BinRead, Debug)]
 #[br(little)]
 pub struct Title {
     #[br(count = 0x200)]
@@ -119,7 +119,7 @@ impl Title {
     }
 }
 
-#[derive(BinRead)]
+#[derive(BinRead, Debug)]
 #[br(little)]
 pub struct Nacp {
     #[br(count = 16)]
