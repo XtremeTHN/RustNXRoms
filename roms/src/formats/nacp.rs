@@ -1,4 +1,5 @@
 use std::string::FromUtf8Error;
+use strum_macros::Display;
 
 use binrw::BinRead;
 
@@ -6,7 +7,7 @@ fn strip(bytes: &mut Vec<u8>) {
     bytes.retain(|&b| b != 0x00);
 }
 
-#[derive(BinRead, PartialEq, Debug, Eq, Clone, Copy)]
+#[derive(BinRead, PartialEq, Debug, Display, Eq, Clone, Copy)]
 #[br(repr(u8))]
 #[br(little)]
 pub enum TitleLanguage {

@@ -13,7 +13,9 @@
       rustPlatform.cargoSetupHook
     ];
 
-    buildInputs = [];
+    buildInputs = with pkgs; [
+      glib
+    ];
 
     pname = "rustnxroms";
     version = "0.1.0";
