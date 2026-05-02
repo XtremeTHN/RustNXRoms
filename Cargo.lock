@@ -569,6 +569,7 @@ version = "0.1.0"
 dependencies = [
  "binrw",
  "env_logger",
+ "glib",
  "hex",
  "log",
  "nxroms",

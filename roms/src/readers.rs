@@ -8,6 +8,7 @@ use crate::crypto::get_tweak;
 use aes::Aes128;
 use ctr::Ctr128BE;
 
+/// Represents a region of a file
 pub struct FileRegion<T: ReadAt> {
     pub offset: u64,
     pub size: u64,
@@ -76,6 +77,8 @@ impl<T: ReadAt> ReadAt for FileRegion<T> {
     }
 }
 
+
+/// Represents an encrypted file region
 pub struct EncryptedCtrFileRegion<T: ReadAt> {
     pub inner: FileRegion<T>,
     pub key: Vec<u8>,

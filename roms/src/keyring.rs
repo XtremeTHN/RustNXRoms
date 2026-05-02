@@ -1,3 +1,20 @@
+//! ```
+//! use nxroms::keyring::Keyring;
+//! 
+//! fn main() {
+//!     let mut keyring = Keyring::new(String::from("~/.switch/prod.keys"));
+//! 
+//!     match keyring.parse() {
+//!         Ok(()) => {
+//!             /// Now you can use the prod keys 
+//!         }
+//!         Err(err) => {
+//!             eprintln!("Failed to parse keys: {}", err);
+//!         }
+//!     }
+//! }
+//! ```
+
 use hex::{FromHexError, decode};
 use std::fs::File;
 use std::io::Read;
@@ -20,6 +37,9 @@ pub enum KeyringErrors {
     HomeDir
 }
 
+/// A struct holding important keys.
+/// Only the nca keys are stored
+// TODO: Add support for all keys
 #[derive(Default, Debug, Clone)]
 pub struct Keyring {
     pub key_area_application: Vec<Vec<u8>>,
@@ -30,13 +50,16 @@ pub struct Keyring {
 }
 
 impl Keyring {
+    /// Constructs a keyring with the given path.<br>
+    /// You should use the [parse](Keyring::parse) method after construting
     pub fn new(path: String) -> Self {
         Self {
             path,
             ..Default::default()
         }
     }
-
+    
+    /// Populates `self` with supported keys
     pub fn parse(&mut self) -> Result<(), KeyringErrors> {
         let path = if self.path.starts_with("~") {
             if let Some(home) = home_dir() {
