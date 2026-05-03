@@ -130,24 +130,22 @@ impl RomFs {
         Ok(r)
     }
 
-    // TODO: refactor this
     fn populate_files<T: ReadAt>(&mut self, stream: &mut T) -> Result<(), RomFsErrors> {
-        let mut sibling: u64 = 0;
+        let mut sibling: u32 = 0;
+
+        let mut buffer = vec![0u8; self.header.file_meta_table_size as usize];
+        stream.read_at(self.header.file_meta_table_offset, &mut buffer)?;
 
         loop {
-            let offset = self.header.file_meta_table_offset + sibling;
-            let size = self.header.file_meta_table_size - sibling;
-            let mut buffer = vec![0u8; size as usize];
+            let slice = &buffer[sibling as usize..];
 
-            stream.read_at(offset, &mut buffer)?;
-
-            let mut cur = Cursor::new(buffer);
+            let mut cur = Cursor::new(slice);
             let f = RomFsFileEntry::read(&mut cur)?;
 
-            sibling = f.sibling as u64;
+            sibling = f.sibling;
             self.files.push(f);
 
-            if sibling == 4294967295 {
+            if sibling == u32::MAX {
                 return Ok(());
             }
         }
