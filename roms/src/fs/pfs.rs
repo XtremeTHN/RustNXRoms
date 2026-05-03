@@ -1,3 +1,5 @@
+//! File system with a magic value of `PFS0`
+//! 
 //! Example:
 //! ```
 //! use nxroms::fs::pfs::{PartitionFs, PFSHeader};

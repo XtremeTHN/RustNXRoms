@@ -1,3 +1,33 @@
+//! A filesystem found in ncas
+//! 
+//! You can find more information here: https://www.3dbrew.org/wiki/RomFS
+//! 
+//! Example:
+//! ```
+//! use nxroms::fs::romfs::RomFs;
+//! use nxroms::formats::nca::Nca;
+//! use nxroms::keyring::Keyring;
+//! use std::fs::File;
+//! 
+//! 
+//! fn main() {
+//!     let mut file = File::open("00000000000000.nca").expect("fail to open nca");
+//!     
+//!     let mut keyring = Keyring::new(String::from("~/.switch/prod.keys"));
+//!     keyring.parse();
+//! 
+//!     // In this example im gonna assume this nca is the control nca
+//!     let mut nca = Nca::new(&keyring, &mut file).expect("fail to parse nca");
+//! 
+//!     let mut fs = nca.open_fs(0, &mut file).expect("fail to open fs 0");
+//!     let romfs = RomFs::new(&mut fs).expect("fail to construct RomFs");
+//! 
+//!     let first_file = romfs.open_file(romfs.files.first().expect("no files"), &mut fs);
+//! 
+//!     // Do things with first_file
+//! }
+//! ```
+
 use std::{
     io::{Cursor, Read, Seek},
     string::FromUtf8Error,
@@ -8,6 +38,7 @@ use positioned_io::ReadAt;
 
 use crate::readers::FileRegion;
 
+/// The header of the RomFs
 #[derive(BinRead, Debug)]
 #[br(little)]
 pub struct RomFsHeader {
@@ -29,18 +60,33 @@ pub struct RomFsHeader {
     pub data_offset: u64,
 }
 
+
+/// Information of a file in a romfs
 #[derive(BinRead)]
 #[br(little)]
 pub struct RomFsFileEntry {
     pub parent: u32,
+    /// The offset of the sibling
     pub sibling: u32,
+    /// The file data offset relative to [data_offset](RomFsHeader::data_offset)
     pub offset: u64,
+    /// The size of the file
     pub size: u64,
+    /// The has of the file
     pub hash: u32,
+    /// The string size of the file name
     pub name_size: u32,
 
+    /// The name of the file in bytes
     #[br(count = name_size)]
-    pub name: Vec<u8>,
+    pub _name: Vec<u8>,
+}
+
+impl RomFsFileEntry {
+    /// Returns a string containing the file name
+    pub fn name(&self) -> Result<String, FromUtf8Error> {
+        String::from_utf8(self._name.clone())
+    }
 }
 
 // #[derive(BinRead, Debug)]
@@ -65,6 +111,8 @@ pub enum RomFsErrors {
     Read(#[from] std::io::Error),
 }
 
+/// A romfs. Only files are supported
+// TODO: add directories support
 pub struct RomFs {
     pub header: RomFsHeader,
     pub files: Vec<RomFsFileEntry>,
@@ -82,6 +130,7 @@ impl RomFs {
         Ok(r)
     }
 
+    // TODO: refactor this
     fn populate_files<T: ReadAt>(&mut self, stream: &mut T) -> Result<(), RomFsErrors> {
         let mut sibling: u64 = 0;
 
@@ -104,10 +153,7 @@ impl RomFs {
         }
     }
 
-    pub fn get_name_for_entry(&self, entry: &RomFsFileEntry) -> Result<String, FromUtf8Error> {
-        String::from_utf8(entry.name.clone())
-    }
-
+    /// Opens a romfs file entry 
     pub fn open_file<T: ReadAt>(&self, file: &RomFsFileEntry, stream: T) -> FileRegion<T> {
         FileRegion::new(stream, self.header.data_offset + file.offset, file.size)
     }

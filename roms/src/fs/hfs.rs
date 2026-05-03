@@ -1,4 +1,4 @@
-//! A partition file system with hashes for every file (hashes not supported)
+//! A `PFS0` with sha-256 for every file (hashes not supported)
 //! 
 //! HFS can be found in the partitions of a xci:
 //! 
