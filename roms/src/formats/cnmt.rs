@@ -1,4 +1,5 @@
 //! A metadata file format
+//!
 //! More info: <https://switchbrew.org/wiki/CNMT>
 //!
 //! Example:
@@ -11,20 +12,20 @@
 //! use std::fs::File;
 //!
 //! fn main() {
-//!     let mut file = File::open("00000000000000.nca").expect("fail to open nca");
+//!     let mut file = File::open("00000000000000.nca").expect("failed to open nca");
 //!
 //!     let mut keyring = Keyring::new(String::from("~/.switch/prod.keys"));
-//!     keyring.parse().expect("fail to parse keyring");
+//!     keyring.parse().expect("failed to parse keyring");
 //!
 //!     // In this example im gonna assume this nca is the meta nca
-//!     let mut nca = Nca::new(&keyring, &mut file).expect("fail to parse nca");
+//!     let mut nca = Nca::new(&keyring, &mut file).expect("failed to parse nca");
 //!
 //!     let mut stream = nca.open_fs(0, &mut file).expect("failed to open fs");
 //!     let cnmt_pfs = PartitionFs::new_pfs0(&mut stream).expect("failed to construct pfs");
 //!
 //!     let mut cnmt = cnmt_pfs.open_entry(&cnmt_pfs.header.entry_table[0], &mut stream);
 //!
-//!     let cnmt_header = PackagedContentMetaHeader::read(&mut cnmt);
+//!     let cnmt_header = PackagedContentMetaHeader::read(&mut cnmt).expect("failed to parse ");
 //!
 //!     // Do things with cnmt_header
 //! }

@@ -10,9 +10,13 @@ use ctr::Ctr128BE;
 
 /// Represents a region of a file
 pub struct FileRegion<T: ReadAt> {
+    /// The offset in which the reading will start
     pub offset: u64,
+    /// The size of the region
     pub size: u64,
+    /// The current relative position
     pub pos: u64,
+    /// The parent
     pub file: T,
 }
 
@@ -76,7 +80,6 @@ impl<T: ReadAt> ReadAt for FileRegion<T> {
         Ok(n)
     }
 }
-
 
 /// Represents an encrypted file region
 pub struct EncryptedCtrFileRegion<T: ReadAt> {
