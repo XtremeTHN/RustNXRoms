@@ -1,3 +1,5 @@
+//! `prod.keys` parser
+//! 
 //! ```
 //! use nxroms::keyring::Keyring;
 //! 

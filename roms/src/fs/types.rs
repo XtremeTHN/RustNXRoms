@@ -1,3 +1,5 @@
+//! Filesystem types used in ncas
+
 use binrw::BinRead;
 
 pub fn media_to_bytes(media: u32) -> u32 {

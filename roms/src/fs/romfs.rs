@@ -1,29 +1,34 @@
-//! A filesystem found in ncas
-//! 
-//! You can find more information here: https://www.3dbrew.org/wiki/RomFS
-//! 
+//! A read-only filesystem
+//!
+//! You can find more information here: <https://www.3dbrew.org/wiki/RomFS>
+//!
 //! Example:
 //! ```
 //! use nxroms::fs::romfs::RomFs;
 //! use nxroms::formats::nca::Nca;
 //! use nxroms::keyring::Keyring;
 //! use std::fs::File;
-//! 
-//! 
+//!  
+//!  
 //! fn main() {
 //!     let mut file = File::open("00000000000000.nca").expect("fail to open nca");
-//!     
+//!      
 //!     let mut keyring = Keyring::new(String::from("~/.switch/prod.keys"));
-//!     keyring.parse();
-//! 
+//!     keyring.parse().expect("fail to parse keyring");
+//!  
 //!     // In this example im gonna assume this nca is the control nca
 //!     let mut nca = Nca::new(&keyring, &mut file).expect("fail to parse nca");
-//! 
+//!  
 //!     let mut fs = nca.open_fs(0, &mut file).expect("fail to open fs 0");
 //!     let romfs = RomFs::new(&mut fs).expect("fail to construct RomFs");
-//! 
-//!     let first_file = romfs.open_file(romfs.files.first().expect("no files"), &mut fs);
-//! 
+//!     
+//!     let romfs_first_file = romfs.files()
+//!         .nth(0)
+//!         .expect("no files")
+//!         .expect("failed to get first file");
+//!
+//!     let first_file = romfs.open_file(&romfs_first_file, &mut fs);
+//!  
 //!     // Do things with first_file
 //! }
 //! ```
@@ -60,7 +65,6 @@ pub struct RomFsHeader {
     pub data_offset: u64,
 }
 
-
 /// Information of a file in a romfs
 #[derive(BinRead)]
 #[br(little)]
@@ -91,7 +95,7 @@ impl RomFsFileEntry {
 
 pub struct RomFsFileIter<'a> {
     meta_table: &'a [u8],
-    current_offset: Option<u32>
+    current_offset: Option<u32>,
 }
 
 impl<'a> Iterator for RomFsFileIter<'a> {
@@ -149,8 +153,7 @@ pub enum RomFsErrors {
 // TODO: add directories support
 pub struct RomFs {
     pub header: RomFsHeader,
-    pub meta_table: Vec<u8>
-    // pub files: Vec<RomFsFileEntry>,
+    pub meta_table: Vec<u8>,
 }
 
 impl RomFs {
@@ -160,19 +163,17 @@ impl RomFs {
 
         stream.read_at(header.file_meta_table_offset, &mut meta_table)?;
 
-        let r = RomFs {
-            header,
-            meta_table
-        };
-
-        Ok(r)
+        Ok(RomFs { header, meta_table })
     }
 
     pub fn files(&self) -> RomFsFileIter<'_> {
-        RomFsFileIter { meta_table: &self.meta_table, current_offset: Some(0) }
+        RomFsFileIter {
+            meta_table: &self.meta_table,
+            current_offset: Some(0),
+        }
     }
 
-    /// Opens a romfs file entry 
+    /// Opens a romfs file entry
     pub fn open_file<T: ReadAt>(&self, file: &RomFsFileEntry, stream: T) -> FileRegion<T> {
         FileRegion::new(stream, self.header.data_offset + file.offset, file.size)
     }

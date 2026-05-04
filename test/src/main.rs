@@ -18,11 +18,21 @@ use nxroms::{
     keyring::Keyring,
 };
 
+mod example;
+
 fn list_romfs_files(rom_fs: RomFs) {
     info!("Listing romfs files...");
-    for (index, file) in rom_fs.files.iter().enumerate() {
-        let name = String::from_utf8(file.name.clone()).expect("error while decoding name");
-        info!("{}: {}", index, name);
+    for (index, file) in rom_fs.files().enumerate() {
+        match file {
+            Ok(file) => {
+                let name = file.name().expect("error while decoding name");
+                info!("{}: {}", index, name);
+            }
+            Err(e) => {
+                log::warn!("Couldn't parse file: {:?}", e);
+            }
+        }
+
     }
 }
 
@@ -57,7 +67,7 @@ fn print_info<T: BinRead + PFSHeader, R: ReadAt + Read + Seek>(
             nca::ContentType::Meta => {
                 info!("found meta: {}", name);
                 let mut fs = nca.open_fs(0, &mut r).expect("fail");
-                let cnmt_pfs = PartitionFs::new_pfs0_header(&mut fs).expect("fail");
+                let cnmt_pfs = PartitionFs::new_pfs0(&mut fs).expect("fail");
 
                 let mut stream = cnmt_pfs.open_entry(&cnmt_pfs.header.entry_table[0], &mut fs);                    
                 
@@ -83,7 +93,8 @@ fn print_info<T: BinRead + PFSHeader, R: ReadAt + Read + Seek>(
                 let mut fs = nca.open_fs(0, &mut r).expect("err");
                 let rom_fs = RomFs::new(&mut fs).expect("err");
 
-                let mut raw_nacp = rom_fs.open_file(&rom_fs.files[0], &mut fs);
+                let first_file = rom_fs.files().nth(0).expect("no files").expect("fail to parse file");
+                let mut raw_nacp = rom_fs.open_file(&first_file, &mut fs);
                 let nacp = Nacp::read(&mut raw_nacp).expect("fail to parse nacp");
                 
                 let lang = TitleLanguage::from_system_locale().unwrap();
@@ -116,7 +127,7 @@ fn xci_test() {
 
 fn nsp_test() {
     let mut file = File::open("undertale.nsp").expect("failed");
-    let pfs = PartitionFs::new_pfs0_header(&mut file).expect("failed");
+    let pfs = PartitionFs::new_pfs0(&mut file).expect("failed");
     let mut keyring = Keyring::new(String::from("~/.switch/prod.keys"));
     keyring.parse().expect("fail");
 
