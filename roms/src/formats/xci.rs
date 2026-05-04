@@ -91,7 +91,7 @@ impl Xci {
 
         stream.seek(SeekFrom::Start(h.hfs_header_offset)).unwrap();
         let hfs_header = HashPartitionFsHeader::read(stream)?;
-        let root_hfs = PartitionFs::<HashPartitionFsHeader>::new(hfs_header)?;
+        let root_hfs = PartitionFs::<HashPartitionFsHeader>::new(hfs_header);
 
         Ok(Self {
             header: h,
@@ -132,7 +132,7 @@ impl Xci {
         partition: &mut FileRegion<T>,
     ) -> Result<PartitionFs<HashPartitionFsHeader>, XciErrors> {
         let hfs_header = HashPartitionFsHeader::read(partition)?;
-        let hfs = PartitionFs::<HashPartitionFsHeader>::new(hfs_header)?;
+        let hfs = PartitionFs::<HashPartitionFsHeader>::new(hfs_header);
 
         Ok(hfs)
     }
