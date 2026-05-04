@@ -1,14 +1,14 @@
 //! `prod.keys` parser
-//! 
+//!
 //! ```
 //! use nxroms::keyring::Keyring;
-//! 
+//!
 //! fn main() {
 //!     let mut keyring = Keyring::new(String::from("~/.switch/prod.keys"));
-//! 
+//!
 //!     match keyring.parse() {
 //!         Ok(()) => {
-//!             /// Now you can use the prod keys 
+//!             /// Now you can use the prod keys
 //!         }
 //!         Err(err) => {
 //!             eprintln!("Failed to parse keys: {}", err);
@@ -17,12 +17,13 @@
 //! }
 //! ```
 
+use dirs::home_dir;
 use hex::{FromHexError, decode};
 use std::fs::File;
 use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::string::FromUtf8Error;
 use thiserror::Error;
-use dirs::home_dir;
 
 #[derive(Error, Debug)]
 pub enum KeyringErrors {
@@ -36,7 +37,7 @@ pub enum KeyringErrors {
     Read(#[from] std::io::Error),
 
     #[error("Couldn't get home directory")]
-    HomeDir
+    HomeDir,
 }
 
 /// A struct holding important keys.
@@ -48,29 +49,31 @@ pub struct Keyring {
     pub key_area_ocean: Vec<Vec<u8>>,
     pub key_area_system: Vec<Vec<u8>>,
     pub header_key: Vec<u8>,
-    path: String,
+    path: PathBuf,
 }
 
 impl Keyring {
     /// Constructs a keyring with the given path.<br>
     /// You should use the [parse](Keyring::parse) method after construting
-    pub fn new(path: String) -> Self {
+    pub fn new<P: AsRef<Path>>(path: P) -> Self {
         Self {
-            path,
+            path: path.as_ref().to_path_buf(),
             ..Default::default()
         }
     }
-    
+
     /// Populates `self` with supported keys
     pub fn parse(&mut self) -> Result<(), KeyringErrors> {
         let path = if self.path.starts_with("~") {
             if let Some(home) = home_dir() {
-                self.path.replace("~", &home.to_string_lossy())
+                self.path
+                    .to_string_lossy()
+                    .replace("~", &home.to_string_lossy())
             } else {
                 return Err(KeyringErrors::HomeDir);
             }
         } else {
-            self.path.clone()
+            self.path.to_string_lossy().to_string()
         };
 
         let mut file = File::open(path)?;
