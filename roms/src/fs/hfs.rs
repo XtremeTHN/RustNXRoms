@@ -1,7 +1,49 @@
+//! A `PFS0` with sha-256 for every file (hashes not supported)
+//! 
+//! HFS can be found in the partitions of a xci:
+//! 
+//! ```
+//! use nxroms::formats::xci::Xci;
+//! use std::fs::File;
+//! 
+//! fn main() {
+//!     let mut rom = File::open("rom.xci").expect("fail");
+//! 
+//!     let mut xci = Xci::new(&mut rom).expect("fail");
+//! 
+//!     let mut part = xci.open_partition(String::from("secure"), &mut rom).expect("fail");
+//! 
+//!     let hfs = xci.open_partition_fs(&mut part).expect("fail");
+//! 
+//!     // Do things with it
+//! }
+//! ```
+//! 
+//! If you want to open a HFS manually you can do this:
+//! ```
+//! use nxroms::fs::hfs::HashPartitionFsHeader;
+//! use nxroms::fs::pfs::PartitionFs;
+//! use nxroms::BinRead;
+//! 
+//! use std::fs::File;
+//! 
+//! fn main() {
+//!     // Replace with the buffer containing the HFS
+//!     let mut file = File::open("fs.hfs").expect("fail");
+//! 
+//!     let hfs_header = HashPartitionFsHeader::read(&mut file).expect("fail");
+//!     let mut pfs = PartitionFs::new(hfs_header).expect("fail");
+//! 
+//!     // Do things with it
+//! }
+//! ```
+
 use binrw::BinRead;
 
 use super::pfs::{PFSEntry, PFSHeader};
 
+
+/// A struct holding information of a HFS0 entry
 #[derive(BinRead, Debug, Clone, Copy)]
 #[br(little)]
 pub struct HFSEntry {
@@ -25,6 +67,7 @@ impl PFSEntry for HFSEntry {
     }
 }
 
+/// The HFS header
 #[derive(BinRead, Debug)]
 #[br(little, magic = b"HFS0")]
 pub struct HashPartitionFsHeader {

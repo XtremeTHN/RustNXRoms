@@ -1,3 +1,38 @@
+//! A read-only filesystem
+//!
+//! You can find more information here: <https://www.3dbrew.org/wiki/RomFS>
+//!
+//! Example:
+//! ```
+//! use nxroms::fs::romfs::RomFs;
+//! use nxroms::formats::nca::Nca;
+//! use nxroms::keyring::Keyring;
+//! use std::fs::File;
+//!  
+//!  
+//! fn main() {
+//!     let mut file = File::open("00000000000000.nca").expect("fail to open nca");
+//!      
+//!     let mut keyring = Keyring::new(String::from("~/.switch/prod.keys"));
+//!     keyring.parse().expect("fail to parse keyring");
+//!  
+//!     // In this example im gonna assume this nca is the control nca
+//!     let mut nca = Nca::new(&keyring, &mut file).expect("fail to parse nca");
+//!  
+//!     let mut fs = nca.open_fs(0, &mut file).expect("fail to open fs 0");
+//!     let romfs = RomFs::new(&mut fs).expect("fail to construct RomFs");
+//!     
+//!     let romfs_first_file = romfs.files()
+//!         .nth(0)
+//!         .expect("no files")
+//!         .expect("failed to get first file");
+//!
+//!     let first_file = romfs.open_file(&romfs_first_file, &mut fs);
+//!  
+//!     // Do things with first_file
+//! }
+//! ```
+
 use std::{
     io::{Cursor, Read, Seek},
     string::FromUtf8Error,
@@ -8,6 +43,7 @@ use positioned_io::ReadAt;
 
 use crate::readers::FileRegion;
 
+/// The header of the RomFs
 #[derive(BinRead, Debug)]
 #[br(little)]
 pub struct RomFsHeader {
@@ -29,18 +65,66 @@ pub struct RomFsHeader {
     pub data_offset: u64,
 }
 
+/// Information of a file in a romfs
 #[derive(BinRead)]
 #[br(little)]
 pub struct RomFsFileEntry {
     pub parent: u32,
+    /// The offset of the sibling
     pub sibling: u32,
+    /// The file data offset relative to [data_offset](RomFsHeader::data_offset)
     pub offset: u64,
+    /// The size of the file
     pub size: u64,
+    /// The has of the file
     pub hash: u32,
+    /// The string size of the file name
     pub name_size: u32,
 
+    /// The name of the file in bytes
     #[br(count = name_size)]
-    pub name: Vec<u8>,
+    pub _name: Vec<u8>,
+}
+
+impl RomFsFileEntry {
+    /// Returns a string containing the file name
+    pub fn name(&self) -> Result<String, FromUtf8Error> {
+        String::from_utf8(self._name.clone())
+    }
+}
+
+pub struct RomFsFileIter<'a> {
+    meta_table: &'a [u8],
+    current_offset: Option<u32>,
+}
+
+impl<'a> Iterator for RomFsFileIter<'a> {
+    type Item = Result<RomFsFileEntry, RomFsErrors>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let offset = self.current_offset?;
+
+        let slice = &self.meta_table[offset as usize..];
+
+        let mut cur = Cursor::new(slice);
+        let f = RomFsFileEntry::read(&mut cur);
+
+        match f {
+            Ok(file) => {
+                self.current_offset = if file.sibling != u32::MAX {
+                    Some(file.sibling)
+                } else {
+                    None
+                };
+
+                Some(Ok(file))
+            }
+            Err(e) => {
+                self.current_offset = None;
+                Some(Err(RomFsErrors::CorruptRomFs(e)))
+            }
+        }
+    }
 }
 
 // #[derive(BinRead, Debug)]
@@ -65,49 +149,31 @@ pub enum RomFsErrors {
     Read(#[from] std::io::Error),
 }
 
+/// A romfs. Only files are supported
+// TODO: add directories support
 pub struct RomFs {
     pub header: RomFsHeader,
-    pub files: Vec<RomFsFileEntry>,
+    pub meta_table: Vec<u8>,
 }
 
 impl RomFs {
     pub fn new<T: ReadAt + Read + Seek>(stream: &mut T) -> Result<Self, RomFsErrors> {
-        let mut r = RomFs {
-            header: RomFsHeader::read(stream)?,
-            files: vec![],
-        };
+        let header = RomFsHeader::read(stream)?;
+        let mut meta_table = vec![0u8; header.file_meta_table_size as usize];
 
-        r.populate_files(stream)?;
+        stream.read_at(header.file_meta_table_offset, &mut meta_table)?;
 
-        Ok(r)
+        Ok(RomFs { header, meta_table })
     }
 
-    fn populate_files<T: ReadAt>(&mut self, stream: &mut T) -> Result<(), RomFsErrors> {
-        let mut sibling: u64 = 0;
-
-        loop {
-            let offset = self.header.file_meta_table_offset + sibling;
-            let size = self.header.file_meta_table_size - sibling;
-            let mut buffer = vec![0u8; size as usize];
-
-            stream.read_at(offset, &mut buffer)?;
-
-            let mut cur = Cursor::new(buffer);
-            let f = RomFsFileEntry::read(&mut cur)?;
-
-            sibling = f.sibling as u64;
-            self.files.push(f);
-
-            if sibling == 4294967295 {
-                return Ok(());
-            }
+    pub fn files(&self) -> RomFsFileIter<'_> {
+        RomFsFileIter {
+            meta_table: &self.meta_table,
+            current_offset: Some(0),
         }
     }
 
-    pub fn get_name_for_entry(&self, entry: &RomFsFileEntry) -> Result<String, FromUtf8Error> {
-        String::from_utf8(entry.name.clone())
-    }
-
+    /// Opens a romfs file entry
     pub fn open_file<T: ReadAt>(&self, file: &RomFsFileEntry, stream: T) -> FileRegion<T> {
         FileRegion::new(stream, self.header.data_offset + file.offset, file.size)
     }

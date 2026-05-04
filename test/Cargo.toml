@@ -3,6 +3,8 @@ name = "nxroms-test"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+glib = ["dep:glib"]
 
 [dependencies]
 nxroms = { workspace = true, features = ["glib"] }
@@ -11,3 +13,5 @@ log = { workspace = true }
 positioned-io = { workspace = true }
 env_logger = { workspace = true }
 hex = {workspace = true }
+glib = { version = "0.22.3", optional = true }
+clap = { version = "4.6.1", features = ["derive"] }

@@ -1,3 +1,19 @@
+//! Nintendo Switch XCI format
+//!
+//! Example:
+//! ```
+//! use nxroms::formats::xci::Xci;
+//! use std::fs::File;
+//!
+//! fn main() {
+//!     let mut file = File::open("rom.xci").expect("failed to open file");
+//!
+//!     let mut xci = Xci::new(&mut file).expect("failed to read XCI");
+//!
+//!     // Do things with the XCI
+//! }
+//! ```
+//! More info: <https://switchbrew.org/wiki/XCI>
 use binrw::BinRead;
 
 use crate::{
@@ -49,6 +65,15 @@ pub enum XciErrors {
     PartitionFsError(#[from] PartitionFsErrors),
 }
 
+#[derive(strum_macros::Display)]
+pub enum XciPartition {
+    Normal,
+    Logo,
+    Update,
+    Secure,
+}
+
+/// Represents an XCI file
 #[derive(Debug)]
 pub struct Xci {
     pub header: XciHeader,
@@ -56,16 +81,17 @@ pub struct Xci {
 }
 
 impl Xci {
+    /// Creates a new XCI from a stream
     pub fn new<T: ReadAt + Read + Seek>(stream: &mut T) -> Result<Xci, XciErrors> {
         let h = XciHeader::read(stream)?;
 
-        if h.magic != [72, 69, 65, 68] {
+        if h.magic != b"HEAD" {
             return Err(XciErrors::InvalidMagic(h.magic));
         }
 
         stream.seek(SeekFrom::Start(h.hfs_header_offset)).unwrap();
         let hfs_header = HashPartitionFsHeader::read(stream)?;
-        let root_hfs = PartitionFs::<HashPartitionFsHeader>::new(hfs_header)?;
+        let root_hfs = PartitionFs::<HashPartitionFsHeader>::new(hfs_header);
 
         Ok(Self {
             header: h,
@@ -73,15 +99,18 @@ impl Xci {
         })
     }
 
+    /// Opens a partition as a FileRegion
     pub fn open_partition<T: ReadAt + Read + Seek>(
         &mut self,
-        partition: String,
+        partition: XciPartition,
         stream: T,
     ) -> Result<FileRegion<T>, XciErrors> {
+        let part_string = partition.to_string().to_lowercase();
+
         for entry in self.root_hfs.header.entry_table.iter() {
             let name = self.root_hfs.get_name_for_entry(entry)?;
 
-            if name != partition {
+            if name != part_string {
                 continue;
             }
 
@@ -94,15 +123,16 @@ impl Xci {
             return Ok(r);
         }
 
-        Err(XciErrors::PartitionNotFound(partition))
+        Err(XciErrors::PartitionNotFound(part_string))
     }
 
+    /// Opens a partition as a PartitionFs
     pub fn open_partition_fs<T: ReadAt + Read + Seek>(
         &mut self,
         partition: &mut FileRegion<T>,
     ) -> Result<PartitionFs<HashPartitionFsHeader>, XciErrors> {
         let hfs_header = HashPartitionFsHeader::read(partition)?;
-        let hfs = PartitionFs::<HashPartitionFsHeader>::new(hfs_header)?;
+        let hfs = PartitionFs::<HashPartitionFsHeader>::new(hfs_header);
 
         Ok(hfs)
     }

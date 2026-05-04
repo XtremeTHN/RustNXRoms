@@ -1,15 +1,38 @@
+//! The NCA format, used for Nintendo Switch game files.
+//!
+//! More info: <https://switchbrew.org/wiki/NCA>
+//!
+//! Example:
+//! ```
+//! use nxroms::formats::nca::Nca;
+//! use nxroms::keyring::Keyring;
+//! use std::fs::File;
+//!
+//! fn main() {
+//!     let mut file = File::open("00000000000000.nca").expect("failed to open nca");
+//!
+//!     let mut keyring = Keyring::new(String::from("~/.switch/prod.keys"));
+//!     keyring.parse().expect("failed to parse keyring");
+//!
+//!     let mut nca = Nca::new(&keyring, &mut file).expect("failed to parse nca");
+//!
+//!     // Do things with nca
+//! }
+//! ```
+
 use crate::fs::romfs::RomFsErrors;
 use crate::fs::types::{EncryptionType, FsEntry, FsHeader, FsType, HashData};
 use crate::readers::{EncryptedCtrFileRegion, FileRegion};
 use crate::{crypto::get_tweak, keyring::Keyring};
-use aes::cipher::BlockDecryptMut;
-use aes::cipher::block_padding::NoPadding;
-use aes::{Aes128, cipher::KeyInit};
+use aes::{
+    Aes128,
+    cipher::KeyInit,
+    cipher::{BlockDecryptMut, block_padding::NoPadding},
+};
 use binrw::BinRead;
 use ecb::Decryptor;
 use positioned_io::ReadAt;
-use std::io::Cursor;
-use std::string::FromUtf8Error;
+use std::{io::Cursor, string::FromUtf8Error};
 use xts_mode::Xts128;
 
 #[derive(BinRead, Debug, Clone, Copy)]
@@ -62,6 +85,7 @@ pub struct KeyArea {
 pub struct NcaHeader {
     #[br(seek_before = std::io::SeekFrom::Start(0x200), count = 4)]
     pub magic: Vec<u8>,
+
     pub distribution_type: DistributionType,
     pub content_type: ContentType,
     pub key_generation_old: KeyGenOld,
@@ -84,12 +108,13 @@ pub struct NcaHeader {
     pub fs_entries: Vec<FsEntry>,
 }
 
+/// The main struct for working with NCA files. It contains the header, key area, and fs headers.
 pub struct Nca {
     pub header: NcaHeader,
     pub key_area: KeyArea,
-    keyring: Keyring,
-
     pub fs_headers: Vec<FsHeader>,
+
+    keyring: Keyring,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -117,6 +142,8 @@ const NCA_ENCRYPTED_SIZE: usize = 0xC00;
 const NCA_HEADER_SECTION_SIZE: usize = 0x200;
 
 impl Nca {
+    /// Creates a new Nca struct from a stream. It reads the header, decrypts the key area, and populates the fs headers.
+    /// You must pass an already parsed keyring.
     pub fn new<T: ReadAt>(keyring: &Keyring, stream: &mut T) -> Result<Self, NcaErrors> {
         let mut header_buf = vec![0u8; NCA_ENCRYPTED_SIZE];
         stream.read_exact_at(0x0, &mut header_buf)?;
@@ -226,16 +253,18 @@ impl Nca {
         Ok(())
     }
 
+    /// Returns the [`FsEntry`] for a given [`FsHeader`].
     pub fn get_entry_for_header(&self, header: &FsHeader) -> FsEntry {
         self.header.fs_entries[header.section as usize]
     }
 
+    /// Opens a file system for a given header. It returns an encrypted file region that can be used to read the file system.
     pub fn open_fs<T: ReadAt>(
         &mut self,
-        header: usize,
+        header_index: usize,
         stream: T,
     ) -> Result<EncryptedCtrFileRegion<T>, NcaErrors> {
-        let header = &self.fs_headers[header];
+        let header = &self.fs_headers[header_index];
         let entry = self.get_entry_for_header(header);
 
         if header.encryption_type != EncryptionType::AesCtr {

@@ -1,4 +1,4 @@
 # RustNXRoms
 
 ## TODO
-- [ ] Add documentation
+- [x] Add documentation
