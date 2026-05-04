@@ -1,141 +1,159 @@
-use binrw::BinRead;
-use positioned_io::ReadAt;
-use std::{
-    fs::File,
-    io::{Read, Seek, Write},
-};
+use clap::Parser;
+use nxroms::formats::cnmt::{self, PackagedContentMetaHeader};
+use nxroms::formats::nacp::{Nacp, TitleLanguage};
+use nxroms::formats::nca::{ContentType, Nca};
+use nxroms::formats::xci::{Xci, XciPartition};
+use nxroms::fs::pfs::{PFSHeader, PartitionFs};
+use nxroms::fs::romfs::RomFs;
+use nxroms::keyring::Keyring;
+use nxroms::{BinRead, ReadAt};
+use std::error::Error;
+use std::fs::File;
+use std::io::{Read, Seek};
+use std::path::PathBuf;
 
-use log::info;
-
-use nxroms::{
-    formats::{
-        cnmt, nacp::{Nacp, TitleLanguage}, nca::{self, Nca}, xci::Xci
-    },
-    fs::{
-        pfs::{PFSHeader, PartitionFs},
-        romfs::RomFs,
-    },
-    keyring::Keyring,
-};
-
-mod example;
-
-fn list_romfs_files(rom_fs: RomFs) {
-    info!("Listing romfs files...");
-    for (index, file) in rom_fs.files().enumerate() {
-        match file {
-            Ok(file) => {
-                let name = file.name().expect("error while decoding name");
-                info!("{}: {}", index, name);
-            }
-            Err(e) => {
-                log::warn!("Couldn't parse file: {:?}", e);
-            }
-        }
-
-    }
+#[derive(Parser)]
+struct Args {
+    #[arg(short, long)]
+    input: PathBuf,
 }
 
-fn print_info<T: BinRead + PFSHeader, R: ReadAt + Read + Seek>(
-    pfs: PartitionFs<T>,
-    part: R,
-) {
-    let mut keyring = Keyring::new(String::from("~/.switch/prod.keys"));
-    keyring.parse().expect("error while parsing keyring");
+type GenericResult<T> = Result<T, Box<dyn Error>>;
 
-    for (index, entry) in pfs.header.entry_table().iter().enumerate() {
-        let name = pfs.get_name_for_entry(entry).expect("failed to get name:");
-        info!("{}", name);
+#[derive(Default)]
+struct RomInfo {
+    title: Option<String>,
+    version: Option<String>,
+    publisher: Option<String>,
+    application_type: Option<String>,
+}
 
-        let mut r = pfs.open_entry(entry, &part);
+fn process<T, S>(pfs: PartitionFs<T>, stream: &mut S) -> GenericResult<RomInfo>
+where
+    T: BinRead + PFSHeader,
+    S: ReadAt + Read + Seek,
+{
+    let mut keyring = Keyring::new("~/.switch/prod.keys");
+    keyring.parse()?;
 
-        let splitted = name.split(".").collect::<Vec<&str>>();
-        let ext = splitted.last();
-        if ext == Some(&"xml") {
-            let mut out = File::create("out.xml").expect("fail");
-            let mut buf = vec![];
-            r.read_to_end(&mut buf);
-            out.write_all(&buf);
-        }
-        
-        if ext != Some(&"nca") {
+    let mut info = RomInfo::default();
+
+    for entry in pfs.header.entry_table().iter() {
+        let name = pfs.get_name_for_entry(entry)?;
+        let ext = name.split(".").last();
+
+        if ext != Some("nca") {
+            println!("Ignoring \"{}\" as it's not a nca", name);
             continue;
         }
 
-        let mut nca = Nca::new(&keyring, &mut r).expect("err");
+        let mut raw_nca = pfs.open_entry(entry, &stream);
+        let mut nca = Nca::new(&keyring, &mut raw_nca)?;
+
         match nca.header.content_type {
-            nca::ContentType::Meta => {
-                info!("found meta: {}", name);
-                let mut fs = nca.open_fs(0, &mut r).expect("fail");
-                let cnmt_pfs = PartitionFs::new_pfs0(&mut fs).expect("fail");
+            ContentType::Control => {
+                println!("Found control nca: \"{}\"", name);
+                let mut fs = nca.open_fs(0, &mut raw_nca)?;
+                let romfs = RomFs::new(&mut fs)?;
 
-                let mut stream = cnmt_pfs.open_entry(&cnmt_pfs.header.entry_table[0], &mut fs);                    
-                
-                let cnmt_head = cnmt::PackagedContentMetaHeader::read(&mut stream).expect("fail");
-                println!("{:#?}", cnmt_head);
+                let first = romfs.files().nth(0);
 
-                if cnmt_head.content_meta_type == cnmt::ContentMetaType::Patch {
-                    info!("this package is an update");
-                } else if cnmt_head.content_meta_type == cnmt::ContentMetaType::Application {
-                    info!("this package is an application");
-                } else if cnmt_head.content_meta_type == cnmt::ContentMetaType::AddOnContent {
-                    info!("this package is a dlc");
-                } else {
-                    info!("unknown package type: {:?}", cnmt_head.content_meta_type);
+                match first {
+                    Some(f) => {
+                        let nacp_entry = f?;
+                        let mut raw_nacp = romfs.open_file(&nacp_entry, &mut fs);
+
+                        let nacp = Nacp::read(&mut raw_nacp)?;
+
+                        let language = TitleLanguage::from_system_locale()?;
+
+                        let title = &nacp.titles[language as usize];
+
+                        info.title = title.name().ok();
+                        info.version = nacp.version().ok();
+                        info.publisher = title.publisher().ok();
+                    }
+                    None => continue,
                 }
-
-                let extended = cnmt::AddOnContentMetaExtendedHeader::read(&mut stream).expect("fail");
-                println!("{:#?}", extended);
             }
 
-            nca::ContentType::Control => {
-                info!("found control: {}", name);
-                let mut fs = nca.open_fs(0, &mut r).expect("err");
-                let rom_fs = RomFs::new(&mut fs).expect("err");
+            ContentType::Meta => {
+                println!("Found meta nca: \"{}\"", name);
+                let mut fs = nca.open_fs(0, &mut raw_nca)?;
+                let cnmt_pfs = PartitionFs::new_pfs0(&mut fs)?;
 
-                let first_file = rom_fs.files().nth(0).expect("no files").expect("fail to parse file");
-                let mut raw_nacp = rom_fs.open_file(&first_file, &mut fs);
-                let nacp = Nacp::read(&mut raw_nacp).expect("fail to parse nacp");
-                
-                let lang = TitleLanguage::from_system_locale().unwrap();
+                let mut raw_cnmt = cnmt_pfs.open_entry(&cnmt_pfs.header.entry_table[0], &mut fs);
+                let cnmt_header = PackagedContentMetaHeader::read(&mut raw_cnmt)?;
 
-                info!("selected language: {:?}", lang);
-
-                let title = &nacp.titles[lang as usize];
-                info!("Title: {}", title.name().unwrap());
-                info!("Version: {}", nacp.version().unwrap());
+                info.application_type = Some(cnmt_header.content_meta_type.to_string());
             }
-
-            _ => {
-                continue;
-            }
+            _ => {}
         }
     }
+
+    Ok(info)
 }
 
-fn xci_test() {
-    let mut file = File::open("/home/axel/Projects/d/ori.xci").expect("er");
-    let mut xci = Xci::new(&mut file).expect("err");
-
-    let mut part = xci
-        .open_partition("secure".to_string(), &file)
-        .expect("err");
-    let pfs = xci.open_partition_fs(&mut part).expect("");
-
-    print_info(pfs, part);
+fn process_nsp(file: &mut File) -> GenericResult<RomInfo> {
+    let pfs = PartitionFs::new_pfs0(file)?;
+    process(pfs, file)
 }
+fn process_xci(file: &mut File) -> GenericResult<RomInfo> {
+    let mut xci = Xci::new(file)?;
+    let mut fs = xci.open_partition(XciPartition::Secure, file)?;
+    let secure = xci.open_partition_fs(&mut fs)?;
 
-fn nsp_test() {
-    let mut file = File::open("undertale.nsp").expect("failed");
-    let pfs = PartitionFs::new_pfs0(&mut file).expect("failed");
-    let mut keyring = Keyring::new(String::from("~/.switch/prod.keys"));
-    keyring.parse().expect("fail");
-
-    print_info(pfs, &mut file);
+    process(secure, &mut fs)
 }
 
 fn main() {
-    let env = env_logger::Env::default().filter_or("LIFT_LOG", "info");
-    env_logger::init_from_env(env);
-    nsp_test();
+    let args = Args::parse();
+
+    let mut file = File::open(args.input.clone()).expect("failed to open rom");
+
+    let extension = args.input.extension();
+
+    match extension {
+        Some(ext) => {
+            let result = {
+                if ext == "nsp" {
+                    process_nsp(&mut file)
+                } else if ext == "xci" {
+                    process_xci(&mut file)
+                } else {
+                    eprintln!("Invalid extension: {}", ext.to_string_lossy());
+                    std::process::exit(2);
+                }
+            };
+
+            match result {
+                Ok(info) => {
+                    let placeholder = String::from("Unknown");
+                    println!("\nRom information:");
+                    println!("\tTitle: {}", info.title.as_ref().unwrap_or(&placeholder));
+                    println!(
+                        "\tPublisher: {}",
+                        info.publisher.as_ref().unwrap_or(&placeholder)
+                    );
+                    println!(
+                        "\tVersion: {}",
+                        info.version.as_ref().unwrap_or(&placeholder)
+                    );
+                    println!(
+                        "\tApplication Type: {}",
+                        info.application_type.as_ref().unwrap_or(&placeholder)
+                    );
+                }
+                Err(e) => {
+                    eprintln!("Failed to parse rom: {}", e);
+                    std::process::exit(3);
+                }
+            }
+        }
+
+        None => {
+            eprintln!("Couldn't detect rom type");
+            std::process::exit(1);
+        }
+    }
 }
