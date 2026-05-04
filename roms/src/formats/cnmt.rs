@@ -34,7 +34,7 @@
 use binrw::BinRead;
 
 /// The content meta type
-#[derive(BinRead, Debug, PartialEq, Eq)]
+#[derive(BinRead, Debug, PartialEq, Eq, strum_macros::Display)]
 #[br(little, repr = u8)]
 pub enum ContentMetaType {
     Invalid = 0,
