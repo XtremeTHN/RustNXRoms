@@ -1,6 +1,6 @@
 //! A rust crate for parsing a variety of nintendo switch formats.
 //!
-//! You can check out the source code of (Lift)[https://github.com/XtremeTHN/Lift] for an example of how to use this crate.
+//! You can check out the source code of <https://github.com/XtremeTHN/Lift> for an example of how to use this crate.
 //!
 //! Example (with glib feature):
 //! ```
