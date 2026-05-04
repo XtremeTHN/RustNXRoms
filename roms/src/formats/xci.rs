@@ -105,7 +105,7 @@ impl Xci {
         partition: XciPartition,
         stream: T,
     ) -> Result<FileRegion<T>, XciErrors> {
-        let part_string = partition.to_string();
+        let part_string = partition.to_string().to_lowercase();
 
         for entry in self.root_hfs.header.entry_table.iter() {
             let name = self.root_hfs.get_name_for_entry(entry)?;
