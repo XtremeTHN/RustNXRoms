@@ -89,6 +89,40 @@ impl RomFsFileEntry {
     }
 }
 
+pub struct RomFsFileIter<'a> {
+    meta_table: &'a [u8],
+    current_offset: Option<u32>
+}
+
+impl<'a> Iterator for RomFsFileIter<'a> {
+    type Item = Result<RomFsFileEntry, RomFsErrors>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let offset = self.current_offset?;
+
+        let slice = &self.meta_table[offset as usize..];
+
+        let mut cur = Cursor::new(slice);
+        let f = RomFsFileEntry::read(&mut cur);
+
+        match f {
+            Ok(file) => {
+                self.current_offset = if file.sibling != u32::MAX {
+                    Some(file.sibling)
+                } else {
+                    None
+                };
+
+                Some(Ok(file))
+            }
+            Err(e) => {
+                self.current_offset = None;
+                Some(Err(RomFsErrors::CorruptRomFs(e)))
+            }
+        }
+    }
+}
+
 // #[derive(BinRead, Debug)]
 // #[br(little)]
 // pub struct RomFsDirectoryEntry {
@@ -115,40 +149,27 @@ pub enum RomFsErrors {
 // TODO: add directories support
 pub struct RomFs {
     pub header: RomFsHeader,
-    pub files: Vec<RomFsFileEntry>,
+    pub meta_table: Vec<u8>
+    // pub files: Vec<RomFsFileEntry>,
 }
 
 impl RomFs {
     pub fn new<T: ReadAt + Read + Seek>(stream: &mut T) -> Result<Self, RomFsErrors> {
-        let mut r = RomFs {
-            header: RomFsHeader::read(stream)?,
-            files: vec![],
-        };
+        let header = RomFsHeader::read(stream)?;
+        let mut meta_table = vec![0u8; header.file_meta_table_size as usize];
 
-        r.populate_files(stream)?;
+        stream.read_at(header.file_meta_table_offset, &mut meta_table)?;
+
+        let r = RomFs {
+            header,
+            meta_table
+        };
 
         Ok(r)
     }
 
-    fn populate_files<T: ReadAt>(&mut self, stream: &mut T) -> Result<(), RomFsErrors> {
-        let mut sibling: u32 = 0;
-
-        let mut buffer = vec![0u8; self.header.file_meta_table_size as usize];
-        stream.read_at(self.header.file_meta_table_offset, &mut buffer)?;
-
-        loop {
-            let slice = &buffer[sibling as usize..];
-
-            let mut cur = Cursor::new(slice);
-            let f = RomFsFileEntry::read(&mut cur)?;
-
-            sibling = f.sibling;
-            self.files.push(f);
-
-            if sibling == u32::MAX {
-                return Ok(());
-            }
-        }
+    pub fn files(&self) -> RomFsFileIter<'_> {
+        RomFsFileIter { meta_table: &self.meta_table, current_offset: Some(0) }
     }
 
     /// Opens a romfs file entry 
